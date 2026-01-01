@@ -86,7 +86,7 @@ export class DeploymentService {
     try {
       // Fetch deployment details
       const result = await query(
-        `SELECT d.id, d.project_id, d.environment_id, d.user_id
+        `SELECT d.id, d.project_id, d.environment_id
          FROM deployments d
          WHERE d.id = $1`,
         [deploymentId]
@@ -99,12 +99,25 @@ export class DeploymentService {
 
       const deployment = result.rows[0];
 
+      // Get the project owner's user ID for deployment tracking
+      const projectResult = await query(
+        'SELECT user_id FROM projects WHERE id = $1',
+        [deployment.project_id]
+      );
+
+      if (projectResult.rows.length === 0) {
+        console.error(`[Webhook] Project not found: ${deployment.project_id}`);
+        return;
+      }
+
+      const userId = projectResult.rows[0].user_id;
+
       // Trigger deployment asynchronously
       this.executeDeployment(
         deployment.id,
         deployment.project_id,
         deployment.environment_id,
-        deployment.user_id
+        userId
       ).catch((error) => {
         console.error(`[Webhook] Error executing deployment ${deploymentId}:`, error);
       });
