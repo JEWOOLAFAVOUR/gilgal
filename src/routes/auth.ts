@@ -270,14 +270,17 @@ router.get('/github/callback', async (req: Request, res: Response, next: NextFun
     // Get GitHub user info
     const githubUser = await GitHubOAuthService.getUserInfo(tokenData.access_token);
 
+    // Generate email if GitHub user has private email
+    const email = githubUser.email || `${githubUser.login}@github.local`;
+
     // Check if user already exists (by email or GitHub username)
-    const existingUser = await UserService.getUserByEmail(githubUser.email);
+    const existingUser = await UserService.getUserByEmail(email);
     let user: any = existingUser;
 
     if (!user) {
       // Create new user from GitHub data
       user = await UserService.createUser({
-        email: githubUser.email,
+        email,
         username: githubUser.login,
         password: uuidv4(), // Generate random password for GitHub users
         fullName: githubUser.name || githubUser.login,
