@@ -3,6 +3,7 @@ import { query } from '../database';
 import { WebhookService } from '../services/WebhookService';
 import { sendSuccess, sendError } from '../utils/error';
 import { HTTP_STATUS } from '../constants';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
@@ -111,6 +112,7 @@ router.post('/github/:projectId', async (req: Request, res: Response, next: Next
  */
 router.post(
   '/github/:projectId/generate-secret',
+  authMiddleware,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params;
