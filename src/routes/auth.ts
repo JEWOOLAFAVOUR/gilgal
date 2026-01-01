@@ -317,6 +317,7 @@ router.get('/github/callback', async (req: Request, res: Response, next: NextFun
  * Get current user's GitHub connection status
  * GET /api/auth/github/status
  */
+
 router.get(
   '/github/status',
   authMiddleware,
