@@ -37,8 +37,15 @@ export function createApp(): Express {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-  // Raw body parsing for webhook signature verification (must be before JSON parser for webhooks)
-  app.use('/webhooks', express.raw({ type: 'application/json' }));
+  // Raw body parsing for webhook signature verification (only for the main webhook endpoint, not generate-secret)
+  app.use('/webhooks/github/:projectId', (req: Request, res: Response, next: NextFunction) => {
+    // Only apply raw body parser to POST requests without /generate-secret path
+    if (req.method === 'POST' && !req.path.includes('generate-secret')) {
+      express.raw({ type: 'application/json' })(req, res, next);
+    } else {
+      next();
+    }
+  });
 
   // Middleware to validate Content-Type for POST/PUT/DELETE requests
   app.use((req: Request, res: Response, next: NextFunction) => {
