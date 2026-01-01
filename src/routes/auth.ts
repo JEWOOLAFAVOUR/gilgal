@@ -1,9 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { UserService } from '../services/UserService';
+import { GitHubOAuthService } from '../services/GitHubOAuthService';
 import { generateAccessToken } from '../utils/jwt';
 import { sendSuccess, sendError, ApiError } from '../utils/error';
 import { HTTP_STATUS, ERROR_CODES } from '../constants';
 import { authMiddleware, requireAuth } from '../middleware/auth';
+import { v4 as uuidv4 } from 'uuid';
+import { query } from '../database';
 
 const router = Router();
 
@@ -221,5 +224,161 @@ router.post('/refresh', authMiddleware, async (req: Request, res: Response, next
     next(error);
   }
 });
+
+/**
+ * GitHub OAuth - Start authorization
+ * GET /api/auth/github/login
+ */
+router.get('/github/login', (req: Request, res: Response) => {
+  try {
+    const state = uuidv4();
+    // Store state in session or temp storage for verification in callback
+    // For now, we'll skip state validation in callback
+    const authUrl = GitHubOAuthService.getAuthorizationUrl(state);
+    sendSuccess(res, { authUrl });
+  } catch (error) {
+    sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      ERROR_CODES.VALIDATION_ERROR,
+      'Failed to generate GitHub auth URL'
+    );
+  }
+});
+
+/**
+ * GitHub OAuth - Callback
+ * GET /api/auth/github/callback?code=xxx
+ */
+router.get('/github/callback', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code, state } = req.query;
+
+    if (!code || typeof code !== 'string') {
+      sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR,
+        'Missing authorization code'
+      );
+      return;
+    }
+
+    // Exchange code for access token
+    const tokenData = await GitHubOAuthService.exchangeCodeForToken(code);
+
+    // Get GitHub user info
+    const githubUser = await GitHubOAuthService.getUserInfo(tokenData.access_token);
+
+    // Check if user already exists (by email or GitHub username)
+    const existingUser = await UserService.getUserByEmail(githubUser.email);
+    let user: any = existingUser;
+
+    if (!user) {
+      // Create new user from GitHub data
+      user = await UserService.createUser({
+        email: githubUser.email,
+        username: githubUser.login,
+        password: uuidv4(), // Generate random password for GitHub users
+        fullName: githubUser.name || githubUser.login,
+      });
+    }
+
+    if (!user) {
+      throw new ApiError(
+        HTTP_STATUS.INTERNAL_SERVER_ERROR,
+        ERROR_CODES.DATABASE_ERROR,
+        'Failed to create or retrieve user'
+      );
+    }
+
+    // Store GitHub token
+    await GitHubOAuthService.storeGitHubToken(user.id, tokenData.access_token, githubUser.login);
+
+    // Generate application JWT token
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      username: user.username,
+    });
+
+    // Redirect to frontend with token
+    const redirectUrl = new URL(process.env.FRONTEND_URL || 'http://localhost:3000');
+    redirectUrl.searchParams.append('token', accessToken);
+    redirectUrl.searchParams.append('github', 'true');
+
+    res.redirect(redirectUrl.toString());
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Get current user's GitHub connection status
+ * GET /api/auth/github/status
+ */
+router.get(
+  '/github/status',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        sendError(
+          res,
+          HTTP_STATUS.UNAUTHORIZED,
+          ERROR_CODES.UNAUTHORIZED,
+          'Authentication required'
+        );
+        return;
+      }
+
+      const githubToken = await GitHubOAuthService.getGitHubToken(req.user.userId);
+
+      sendSuccess(res, {
+        connected: !!githubToken,
+        username: githubToken?.username || null,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Disconnect GitHub account
+ * POST /api/auth/github/disconnect
+ */
+router.post(
+  '/github/disconnect',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        sendError(
+          res,
+          HTTP_STATUS.UNAUTHORIZED,
+          ERROR_CODES.UNAUTHORIZED,
+          'Authentication required'
+        );
+        return;
+      }
+
+      await query(
+        `
+        UPDATE users 
+        SET github_token = NULL, 
+            github_token_expires_at = NULL,
+            github_username = NULL
+        WHERE id = $1
+        `,
+        [req.user.userId]
+      );
+
+      sendSuccess(res, {}, 'GitHub account disconnected');
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export default router;

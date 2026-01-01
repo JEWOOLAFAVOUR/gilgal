@@ -137,6 +137,23 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_projects_webhook_secret ON projects(webhook_secret);
     `,
   },
+  {
+    id: '011_add_github_oauth_to_users',
+    sql: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS github_token TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS github_token_expires_at TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS github_username VARCHAR(255);
+      CREATE INDEX IF NOT EXISTS idx_users_github_username ON users(github_username);
+    `,
+  },
+  {
+    id: '012_add_auto_deploy_to_projects',
+    sql: `
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS auto_deploy_enabled BOOLEAN DEFAULT FALSE;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_webhook_id VARCHAR(255);
+      CREATE INDEX IF NOT EXISTS idx_projects_auto_deploy ON projects(auto_deploy_enabled);
+    `,
+  },
 ];
 
 /**
