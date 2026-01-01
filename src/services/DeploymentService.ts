@@ -100,10 +100,9 @@ export class DeploymentService {
       const deployment = result.rows[0];
 
       // Get the project owner's user ID for deployment tracking
-      const projectResult = await query(
-        'SELECT user_id FROM projects WHERE id = $1',
-        [deployment.project_id]
-      );
+      const projectResult = await query('SELECT user_id FROM projects WHERE id = $1', [
+        deployment.project_id,
+      ]);
 
       if (projectResult.rows.length === 0) {
         console.error(`[Webhook] Project not found: ${deployment.project_id}`);
