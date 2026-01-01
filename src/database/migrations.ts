@@ -113,6 +113,7 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
     `,
   },
+
   {
     id: '008_fix_projects_slug_constraint',
     sql: `
