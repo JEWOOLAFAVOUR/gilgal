@@ -379,7 +379,7 @@ CMD ["npm", "start"]
           PortBindings: {
             [`${containerPort}/tcp`]: [
               {
-                HostIp: '127.0.0.1',
+                HostIp: '0.0.0.0',
                 HostPort: String(port),
               },
             ],
