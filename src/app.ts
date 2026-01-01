@@ -12,6 +12,7 @@ import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
 import environmentRoutes from './routes/environments';
 import deploymentRoutes from './routes/deployments';
+import webhookRoutes from './routes/webhooks';
 
 /**
  * Create and configure Express application
@@ -35,6 +36,9 @@ export function createApp(): Express {
   // Body parsing middleware
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+  // Raw body parsing for webhook signature verification (must be before JSON parser for webhooks)
+  app.use('/webhooks', express.raw({ type: 'application/json' }));
 
   // Middleware to validate Content-Type for POST/PUT/DELETE requests
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -89,6 +93,9 @@ export function createApp(): Express {
   app.use('/api/projects/:projectId/environments', environmentRoutes);
   app.use('/api/projects/:projectId/deployments', deploymentRoutes);
   app.use('/api/deployments', deploymentRoutes);
+
+  // Webhook Routes (must be after raw body middleware)
+  app.use('/webhooks', webhookRoutes);
 
   // 404 handler
   app.use((req: Request, res: Response) => {

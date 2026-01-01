@@ -130,6 +130,13 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_deployments_container_port ON deployments(container_port);
     `,
   },
+  {
+    id: '010_add_webhook_secret_to_projects',
+    sql: `
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(64);
+      CREATE INDEX IF NOT EXISTS idx_projects_webhook_secret ON projects(webhook_secret);
+    `,
+  },
 ];
 
 /**
