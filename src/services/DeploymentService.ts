@@ -79,6 +79,41 @@ export class DeploymentService {
   }
 
   /**
+   * Execute an existing deployment (for webhooks)
+   * Triggers the build and deployment process asynchronously
+   */
+  static async executeWebhookDeployment(deploymentId: string): Promise<void> {
+    try {
+      // Fetch deployment details
+      const result = await query(
+        `SELECT d.id, d.project_id, d.environment_id, d.user_id
+         FROM deployments d
+         WHERE d.id = $1`,
+        [deploymentId]
+      );
+
+      if (result.rows.length === 0) {
+        console.error(`[Webhook] Deployment not found: ${deploymentId}`);
+        return;
+      }
+
+      const deployment = result.rows[0];
+      
+      // Trigger deployment asynchronously
+      this.executeDeployment(
+        deployment.id,
+        deployment.project_id,
+        deployment.environment_id,
+        deployment.user_id
+      ).catch((error) => {
+        console.error(`[Webhook] Error executing deployment ${deploymentId}:`, error);
+      });
+    } catch (error) {
+      console.error(`[Webhook] Error in executeWebhookDeployment:`, error);
+    }
+  }
+
+  /**
    * Execute the deployment pipeline asynchronously
    * Builds image, runs container, and updates status
    */

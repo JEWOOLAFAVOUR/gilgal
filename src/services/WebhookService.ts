@@ -81,22 +81,11 @@ export class WebhookService {
         `[Webhook] Created deployment ${deploymentId} for project ${project.slug} (${branch})`
       );
 
-      // Trigger the deployment asynchronously by calling the deployment creation logic
-      // We'll trigger via the deployment pipeline by creating a request-like object
-      setImmediate(async () => {
-        try {
-          // Fetch deployment and trigger pipeline
-          const deploymentCheck = await query('SELECT id FROM deployments WHERE id = $1', [
-            deploymentId,
-          ]);
-
-          if (deploymentCheck.rows.length > 0) {
-            // The deployment exists, the webhook endpoint will handle triggering it
-            console.log(`[Webhook] Deployment ${deploymentId} ready for execution`);
-          }
-        } catch (error) {
-          console.error(`[Webhook] Error preparing deployment ${deploymentId}:`, error);
-        }
+      // Trigger the deployment asynchronously
+      setImmediate(() => {
+        DeploymentService.executeWebhookDeployment(deploymentId).catch((error) => {
+          console.error(`[Webhook] Error executing deployment ${deploymentId}:`, error);
+        });
       });
 
       return { success: true, deploymentId, message: `Deployment triggered for ${branch} branch` };
