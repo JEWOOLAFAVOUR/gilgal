@@ -152,9 +152,12 @@ ${mainDomainBlock}
       console.log('[NginxConfig] Generated config:');
       console.log(config);
 
-      // Try to write config if running with permissions
+      // Try to write config with sudo using tee
       try {
-        fs.writeFileSync(this.CONFIG_PATH, config, 'utf-8');
+        execSync(
+          `echo "${config.replace(/"/g, '\\"')}" | sudo tee ${this.CONFIG_PATH} > /dev/null`,
+          { stdio: 'pipe' }
+        );
         console.log(`[NginxConfig] Config written to ${this.CONFIG_PATH}`);
 
         // Test nginx configuration
@@ -166,11 +169,11 @@ ${mainDomainBlock}
           execSync('sudo systemctl reload nginx', { stdio: 'pipe' });
           console.log('[NginxConfig] Nginx reloaded successfully');
         } catch (error) {
-          console.warn('[NginxConfig] Could not reload nginx (may require sudo):', error);
+          console.warn('[NginxConfig] Could not reload nginx:', error);
           // Continue anyway - config is written even if reload fails
         }
       } catch (error) {
-        console.warn('[NginxConfig] Could not write config file (may require sudo):', error);
+        console.warn('[NginxConfig] Could not write config file:', error);
         // Log the config that would have been written for manual setup
         console.log('[NginxConfig] Manually copy this to /etc/nginx/sites-available/gilgal.tech:');
         console.log(config);
