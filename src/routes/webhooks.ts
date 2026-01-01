@@ -3,33 +3,23 @@ import { query } from '../database';
 import { WebhookService } from '../services/WebhookService';
 import { sendSuccess, sendError } from '../utils/error';
 import { HTTP_STATUS } from '../constants';
-import { authMiddleware } from '../middleware/auth';
+import { extractTokenFromHeader, verifyToken } from '../utils/jwt';
 
 const router = Router();
 
 /**
- * Custom middleware to parse raw body and make it available as both raw and parsed JSON
+ * Custom middleware to reconstruct raw body for signature verification
  */
-const parseWebhookBody = (req: Request, res: Response, next: NextFunction) => {
-  if (Buffer.isBuffer(req.body)) {
-    // Store raw body for signature verification
-    (req as any).rawBody = req.body.toString('utf-8');
-    // Parse JSON
-    try {
-      req.body = JSON.parse((req as any).rawBody);
-    } catch {
-      return sendError(
-        res,
-        HTTP_STATUS.BAD_REQUEST,
-        'INVALID_JSON',
-        'Request body is not valid JSON'
-      );
-    }
+const reconstructRawBody = (req: Request, res: Response, next: NextFunction) => {
+  // For webhook endpoint (not generate-secret), reconstruct raw body from parsed JSON
+  if (req.body && typeof req.body === 'object') {
+    // This will produce the exact bytes that GitHub sent (with consistent JSON formatting)
+    (req as any).rawBody = JSON.stringify(req.body);
   }
   next();
 };
 
-router.use(parseWebhookBody);
+router.use(reconstructRawBody);
 
 /**
  * POST /webhooks/github/:projectId
@@ -108,59 +98,64 @@ router.post('/github/:projectId', async (req: Request, res: Response, next: Next
 /**
  * POST /webhooks/github/:projectId/generate-secret
  * Generate a new webhook secret for a project
- * Requires authentication
+ * Requires authentication via Bearer token
  */
-router.post(
-  '/github/:projectId/generate-secret',
-  authMiddleware,
-  async (req: Request, res: Response, next: NextFunction) => {
+router.post('/github/:projectId/generate-secret', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params;
+    
+    // Extract and verify token directly from Authorization header
+    let userId: string | undefined;
     try {
-      const { projectId } = req.params;
-      const userId = (req as any).user?.id;
-
-      if (!userId) {
-        return sendError(res, HTTP_STATUS.UNAUTHORIZED, 'UNAUTHORIZED', 'Authentication required');
-      }
-
-      // Verify the user owns this project
-      const result = await query(
-        'SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
-        [projectId, userId]
-      );
-
-      if (result.rows.length === 0) {
-        return sendError(
-          res,
-          HTTP_STATUS.FORBIDDEN,
-          'ACCESS_DENIED',
-          'You do not have access to this project'
-        );
-      }
-
-      // Generate new secret
-      const newSecret = WebhookService.generateSecret();
-
-      // Update project with new secret
-      await query(
-        'UPDATE projects SET webhook_secret = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [newSecret, projectId]
-      );
-
-      const webhookUrl = `https://api.gilgal.tech/webhooks/github/${projectId}`;
-
-      return sendSuccess(
-        res,
-        {
-          secret: newSecret,
-          webhookUrl,
-          instructions: `Add this webhook to your GitHub repository: Settings > Webhooks > Add webhook\n- Payload URL: ${webhookUrl}\n- Content type: application/json\n- Secret: ${newSecret}\n- Events: Push events`,
-        },
-        'Webhook secret generated'
-      );
+      const token = extractTokenFromHeader(req.headers.authorization);
+      const decoded = verifyToken(token);
+      userId = (decoded as any).userId;
     } catch (error) {
-      next(error);
+      return sendError(res, HTTP_STATUS.UNAUTHORIZED, 'UNAUTHORIZED', 'Authentication required');
     }
+
+    if (!userId) {
+      return sendError(res, HTTP_STATUS.UNAUTHORIZED, 'UNAUTHORIZED', 'Authentication required');
+    }
+
+    // Verify the user owns this project
+    const projectResult = await query(
+      'SELECT id FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      [projectId, userId]
+    );
+
+    if (projectResult.rows.length === 0) {
+      return sendError(
+        res,
+        HTTP_STATUS.FORBIDDEN,
+        'ACCESS_DENIED',
+        'You do not have access to this project'
+      );
+    }
+
+    // Generate new secret
+    const newSecret = WebhookService.generateSecret();
+
+    // Update project with new secret
+    await query(
+      'UPDATE projects SET webhook_secret = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [newSecret, projectId]
+    );
+
+    const webhookUrl = `https://api.gilgal.tech/webhooks/github/${projectId}`;
+
+    return sendSuccess(
+      res,
+      {
+        secret: newSecret,
+        webhookUrl,
+        instructions: `Add this webhook to your GitHub repository: Settings > Webhooks > Add webhook\n- Payload URL: ${webhookUrl}\n- Content type: application/json\n- Secret: ${newSecret}\n- Events: Push events`,
+      },
+      'Webhook secret generated'
+    );
+  } catch (error) {
+    next(error);
   }
-);
+});
 
 export default router;
