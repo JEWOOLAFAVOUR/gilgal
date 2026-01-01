@@ -98,7 +98,7 @@ export class DeploymentService {
       }
 
       const deployment = result.rows[0];
-      
+
       // Trigger deployment asynchronously
       this.executeDeployment(
         deployment.id,
