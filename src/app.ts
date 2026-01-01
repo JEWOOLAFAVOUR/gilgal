@@ -5,6 +5,7 @@ import config from './config';
 import { errorHandler, sendSuccess, sendError } from './utils/error';
 import { requestLogger, requestIdMiddleware } from './middleware/logging';
 import { HTTP_STATUS } from './constants';
+import { NginxConfigService } from './services/NginxConfigService';
 
 // Import route handlers
 import authRoutes from './routes/auth';
@@ -66,6 +67,20 @@ export function createApp(): Express {
   // Version endpoint
   app.get('/version', (req: Request, res: Response) => {
     sendSuccess(res, { version: '1.0.0' }, 'API version');
+  });
+
+  // Public endpoint: Active deployments (for nginx config generation)
+  app.get('/api/deployments/active', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const deployments = await NginxConfigService.getActiveDeployments();
+      sendSuccess(res, {
+        deployments,
+        total: deployments.length,
+        domain: 'gilgal.tech',
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   // API Routes

@@ -96,8 +96,9 @@ server {
       .join('\n');
 
     // Main domain falls back to first deployment or shows info page
-    const mainDomainBlock = deployments.length > 0
-      ? `
+    const mainDomainBlock =
+      deployments.length > 0
+        ? `
 server {
     listen 80;
     server_name ${this.DOMAIN} www.${this.DOMAIN};
@@ -111,7 +112,7 @@ server {
     }
 }
 `
-      : `
+        : `
 server {
     listen 80;
     server_name ${this.DOMAIN} www.${this.DOMAIN};

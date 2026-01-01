@@ -210,23 +210,4 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response, next: 
   }
 });
 
-/**
- * Get all active deployments (for nginx config generation)
- * GET /api/deployments/active
- * Public endpoint - no auth required (used by nginx config generator)
- */
-router.get('/active', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const deployments = await NginxConfigService.getActiveDeployments();
-
-    sendSuccess(res, {
-      deployments,
-      total: deployments.length,
-      domain: 'gilgal.tech',
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 export default router;
