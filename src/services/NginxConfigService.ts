@@ -152,12 +152,13 @@ ${mainDomainBlock}
       console.log('[NginxConfig] Generated config:');
       console.log(config);
 
-      // Try to write config with sudo using tee
+      // Try to write config using temp file (avoids shell escaping issues)
       try {
-        execSync(
-          `echo "${config.replace(/"/g, '\\"')}" | sudo tee ${this.CONFIG_PATH} > /dev/null`,
-          { stdio: 'pipe' }
-        );
+        const tempPath = `/tmp/gilgal-${Date.now()}.nginx.conf`;
+        fs.writeFileSync(tempPath, config, 'utf-8');
+        
+        // Move temp file to nginx directory with sudo
+        execSync(`sudo mv ${tempPath} ${this.CONFIG_PATH}`, { stdio: 'pipe' });
         console.log(`[NginxConfig] Config written to ${this.CONFIG_PATH}`);
 
         // Test nginx configuration
