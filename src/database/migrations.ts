@@ -122,6 +122,13 @@ const migrations = [
       WHERE deleted_at IS NULL;
     `,
   },
+  {
+    id: '009_add_container_port_to_deployments',
+    sql: `
+      ALTER TABLE deployments ADD COLUMN IF NOT EXISTS container_port INTEGER;
+      CREATE INDEX IF NOT EXISTS idx_deployments_container_port ON deployments(container_port);
+    `,
+  },
 ];
 
 /**

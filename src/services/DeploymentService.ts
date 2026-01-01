@@ -3,6 +3,7 @@ import { Deployment, DeploymentLog, CreateDeploymentRequest } from '../types';
 import { HTTP_STATUS, ERROR_CODES, DEPLOYMENT_STATUS } from '../constants';
 import { ApiError } from '../utils/error';
 import { DockerService } from './DockerService';
+import { NginxConfigService } from './NginxConfigService';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -140,10 +141,10 @@ export class DeploymentService {
       await query(
         `
         UPDATE deployments 
-        SET status = $1, container_id = $2, duration_seconds = $3, deployed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $4
+        SET status = $1, container_id = $2, container_port = $3, duration_seconds = $4, deployed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $5
         `,
-        [DEPLOYMENT_STATUS.SUCCESS, containerId, duration, deploymentId]
+        [DEPLOYMENT_STATUS.SUCCESS, containerId, port, duration, deploymentId]
       );
 
       await this.addDeploymentLog(
@@ -151,6 +152,24 @@ export class DeploymentService {
         'info',
         `Deployment completed successfully in ${duration}s`
       );
+
+      // Regenerate nginx config with new deployment
+      await this.addDeploymentLog(deploymentId, 'info', 'Updating nginx configuration...');
+      try {
+        await NginxConfigService.applyNginxConfig();
+        await this.addDeploymentLog(
+          deploymentId,
+          'info',
+          'Nginx configuration updated - app now accessible at subdomain'
+        );
+      } catch (nginxError) {
+        console.warn('[Deployment] Nginx config update failed:', nginxError);
+        await this.addDeploymentLog(
+          deploymentId,
+          'warn',
+          'Deployment successful but nginx config update failed (may require manual setup)'
+        );
+      }
 
       console.log(`[Deployment] Deployment ${deploymentId} completed successfully`);
     } catch (error) {

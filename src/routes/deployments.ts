@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { DeploymentService } from '../services/DeploymentService';
+import { NginxConfigService } from '../services/NginxConfigService';
 import { sendSuccess, sendError } from '../utils/error';
 import { HTTP_STATUS, ERROR_CODES, PAGINATION } from '../constants';
 import { authMiddleware } from '../middleware/auth';
@@ -204,6 +205,25 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response, next: 
     await DeploymentService.cancelDeployment(req.params.id, req.user.userId);
 
     sendSuccess(res, null, 'Deployment cancelled');
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Get all active deployments (for nginx config generation)
+ * GET /api/deployments/active
+ * Public endpoint - no auth required (used by nginx config generator)
+ */
+router.get('/active', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const deployments = await NginxConfigService.getActiveDeployments();
+
+    sendSuccess(res, {
+      deployments,
+      total: deployments.length,
+      domain: 'gilgal.tech',
+    });
   } catch (error) {
     next(error);
   }
