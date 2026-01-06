@@ -76,6 +76,7 @@ export interface CreateProjectRequest {
   description?: string;
   repositoryUrl?: string;
   framework: string;
+  status?: 'active' | 'inactive' | 'deploying' | 'failed';
 }
 
 /**

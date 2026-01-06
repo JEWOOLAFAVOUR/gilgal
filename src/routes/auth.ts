@@ -229,11 +229,14 @@ router.post('/refresh', authMiddleware, async (req: Request, res: Response, next
  * GitHub OAuth - Start authorization
  * GET /api/auth/github/login
  */
-router.get('/github/login', (req: Request, res: Response) => {
+router.get('/github/login', authMiddleware, (req: Request, res: Response) => {
   try {
-    const state = uuidv4();
-    // Store state in session or temp storage for verification in callback
-    // For now, we'll skip state validation in callback
+    if (!req.user) {
+      sendError(res, HTTP_STATUS.UNAUTHORIZED, ERROR_CODES.UNAUTHORIZED, 'Authentication required');
+      return;
+    }
+
+    const state = Buffer.from(JSON.stringify({ userId: req.user.userId })).toString('base64');
     const authUrl = GitHubOAuthService.getAuthorizationUrl(state);
     sendSuccess(res, { authUrl });
   } catch (error) {
@@ -248,7 +251,7 @@ router.get('/github/login', (req: Request, res: Response) => {
 
 /**
  * GitHub OAuth - Callback
- * GET /api/auth/github/callback?code=xxx
+ * GET /api/auth/github/callback?code=xxx&state=yyy
  */
 router.get('/github/callback', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -264,51 +267,44 @@ router.get('/github/callback', async (req: Request, res: Response, next: NextFun
       return;
     }
 
+    if (!state || typeof state !== 'string') {
+      sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR,
+        'Missing state parameter'
+      );
+      return;
+    }
+
+    // Decode state to get userId
+    let userId: string;
+    try {
+      const stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
+      userId = stateData.userId;
+    } catch (err) {
+      sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR,
+        'Invalid state parameter'
+      );
+      return;
+    }
+
     // Exchange code for access token
     const tokenData = await GitHubOAuthService.exchangeCodeForToken(code);
 
     // Get GitHub user info
     const githubUser = await GitHubOAuthService.getUserInfo(tokenData.access_token);
 
-    // Generate email if GitHub user has private email
-    const email = githubUser.email || `${githubUser.login}@github.local`;
+    // Store GitHub token for the user
+    await GitHubOAuthService.storeGitHubToken(userId, tokenData.access_token, githubUser.login);
 
-    // Check if user already exists (by email or GitHub username)
-    const existingUser = await UserService.getUserByEmail(email);
-    let user: any = existingUser;
-
-    if (!user) {
-      // Create new user from GitHub data
-      user = await UserService.createUser({
-        email,
-        username: githubUser.login,
-        password: uuidv4(), // Generate random password for GitHub users
-        fullName: githubUser.name || githubUser.login,
-      });
-    }
-
-    if (!user) {
-      throw new ApiError(
-        HTTP_STATUS.INTERNAL_SERVER_ERROR,
-        ERROR_CODES.DATABASE_ERROR,
-        'Failed to create or retrieve user'
-      );
-    }
-
-    // Store GitHub token
-    await GitHubOAuthService.storeGitHubToken(user.id, tokenData.access_token, githubUser.login);
-
-    // Generate application JWT token
-    const accessToken = generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      username: user.username,
-    });
-
-    // Redirect to frontend with token
+    // Redirect back to frontend dashboard
     const redirectUrl = new URL(process.env.FRONTEND_URL || 'http://localhost:3000');
-    redirectUrl.searchParams.append('token', accessToken);
-    redirectUrl.searchParams.append('github', 'true');
+    redirectUrl.pathname = '/dashboard/create-project';
+    redirectUrl.searchParams.append('github', 'success');
 
     res.redirect(redirectUrl.toString());
   } catch (error) {
@@ -379,6 +375,58 @@ router.post(
       );
 
       sendSuccess(res, {}, 'GitHub account disconnected');
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Get user's GitHub repositories
+ * GET /api/auth/github/repositories
+ */
+router.get(
+  '/github/repositories',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        sendError(
+          res,
+          HTTP_STATUS.UNAUTHORIZED,
+          ERROR_CODES.UNAUTHORIZED,
+          'Authentication required'
+        );
+        return;
+      }
+
+      const githubToken = await GitHubOAuthService.getGitHubToken(req.user.userId);
+
+      if (!githubToken) {
+        sendError(
+          res,
+          HTTP_STATUS.UNAUTHORIZED,
+          ERROR_CODES.UNAUTHORIZED,
+          'GitHub not connected. Please connect your GitHub account first.'
+        );
+        return;
+      }
+
+      const page = parseInt(req.query.page as string) || 1;
+      const perPage = parseInt(req.query.perPage as string) || 30;
+
+      const repositories = await GitHubOAuthService.getUserRepositories(
+        githubToken.token,
+        page,
+        perPage
+      );
+
+      sendSuccess(res, {
+        repositories,
+        page,
+        perPage,
+        total: repositories.length,
+      });
     } catch (error) {
       next(error);
     }

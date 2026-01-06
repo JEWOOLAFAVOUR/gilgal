@@ -40,17 +40,19 @@ export function createApp(): Express {
   // Middleware to validate Content-Type for POST/PUT/DELETE requests
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-      if (!req.is('json') && Object.keys(req.body || {}).length === 0) {
-        // Only enforce if body is empty, allow GET requests through
-        const contentType = req.headers['content-type'];
-        if (!contentType || !contentType.includes('application/json')) {
-          return sendError(
-            res,
-            HTTP_STATUS.BAD_REQUEST,
-            'INVALID_CONTENT_TYPE',
-            'Content-Type: application/json header is required for this request'
-          );
-        }
+      // Check if request has a body
+      const hasBody = req.body && Object.keys(req.body).length > 0;
+      const contentType = req.headers['content-type'] || '';
+      const isJson = req.is('json') || contentType.includes('application/json');
+
+      // Only enforce Content-Type if there's actual data in the body AND it's not JSON
+      if (hasBody && !isJson) {
+        return sendError(
+          res,
+          HTTP_STATUS.BAD_REQUEST,
+          'INVALID_CONTENT_TYPE',
+          'Content-Type: application/json header is required for this request'
+        );
       }
     }
     next();

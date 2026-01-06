@@ -156,6 +156,72 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response, next: Nex
 });
 
 /**
+ * Trigger deployment for a project
+ * POST /api/projects/:projectId/deployments
+ */
+router.post(
+  '/:projectId/deployments',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        sendError(
+          res,
+          HTTP_STATUS.UNAUTHORIZED,
+          ERROR_CODES.UNAUTHORIZED,
+          'Authentication required'
+        );
+        return;
+      }
+
+      const projectId = req.params.projectId;
+      const { environmentId } = req.body;
+
+      // Get project to verify ownership
+      const project = await ProjectService.getProject(projectId, req.user.userId);
+      if (!project) {
+        sendError(res, HTTP_STATUS.NOT_FOUND, ERROR_CODES.NOT_FOUND, 'Project not found');
+        return;
+      }
+
+      // Validate environmentId
+      if (!environmentId) {
+        sendError(
+          res,
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR,
+          'Environment ID is required'
+        );
+        return;
+      }
+
+      // Update project status to deploying
+      await ProjectService.updateProject(projectId, req.user.userId, {
+        status: 'deploying',
+      });
+
+      // TODO: Trigger actual deployment process
+      // This would:
+      // 1. Clone the repository
+      // 2. Detect framework
+      // 3. Build the application
+      // 4. Create Docker container
+      // 5. Start the container
+      // 6. Set up webhook for auto-deployment
+
+      sendSuccess(
+        res,
+        { projectId, environmentId, status: 'deploying' },
+        'Deployment started',
+        HTTP_STATUS.ACCEPTED
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * Delete project
  * DELETE /api/projects/:id
  */

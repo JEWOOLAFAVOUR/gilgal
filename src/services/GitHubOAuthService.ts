@@ -233,4 +233,57 @@ export class GitHubOAuthService {
       username: row.github_username,
     };
   }
+
+  /**
+   * Get user's repositories from GitHub
+   */
+  static async getUserRepositories(
+    accessToken: string,
+    page: number = 1,
+    perPage: number = 30
+  ): Promise<
+    Array<{
+      id: number;
+      name: string;
+      full_name: string;
+      description: string | null;
+      url: string;
+      html_url: string;
+      language: string | null;
+      stargazers_count: number;
+      forks_count: number;
+      private: boolean;
+    }>
+  > {
+    const response = await fetch(
+      `${this.GITHUB_API_URL}/user/repos?page=${page}&per_page=${perPage}&sort=updated&direction=desc`,
+      {
+        headers: {
+          Authorization: `token ${accessToken}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        HTTP_STATUS.UNAUTHORIZED,
+        ERROR_CODES.UNAUTHORIZED,
+        'Failed to fetch GitHub repositories'
+      );
+    }
+
+    return (await response.json()) as Array<{
+      id: number;
+      name: string;
+      full_name: string;
+      description: string | null;
+      url: string;
+      html_url: string;
+      language: string | null;
+      stargazers_count: number;
+      forks_count: number;
+      private: boolean;
+    }>;
+  }
 }

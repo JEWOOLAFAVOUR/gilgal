@@ -52,7 +52,8 @@ export const config = {
   github: {
     clientId: process.env.GITHUB_CLIENT_ID || '',
     clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
-    callbackUrl: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3000/auth/github/callback',
+    callbackUrl:
+      process.env.GITHUB_CALLBACK_URL || 'http://localhost:3000/api/auth/github/callback',
   },
 };
 

@@ -175,6 +175,10 @@ export class ProjectService {
       updates.push(`repository_url = $${paramCount++}`);
       values.push(data.repositoryUrl);
     }
+    if (data.status !== undefined) {
+      updates.push(`status = $${paramCount++}`);
+      values.push(data.status);
+    }
 
     if (updates.length === 0) {
       return this.getProject(projectId, userId);
