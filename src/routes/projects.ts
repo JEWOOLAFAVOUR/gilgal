@@ -201,12 +201,14 @@ router.post(
         status: 'deploying',
       });
 
-      // Create deployment record
-      const deploymentId = uuidv4();
+      // Create deployment record in database
+      const deployment = await DeploymentService.createDeployment(projectId, req.user.userId, {
+        environmentId,
+      });
 
       // Trigger actual deployment process (fire and forget)
       DeploymentService.executeDeployment(
-        deploymentId,
+        deployment.id,
         projectId,
         environmentId,
         req.user.userId
