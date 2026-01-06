@@ -200,14 +200,15 @@ router.post(
         status: 'deploying',
       });
 
-      // TODO: Trigger actual deployment process
-      // This would:
-      // 1. Clone the repository
-      // 2. Detect framework
-      // 3. Build the application
-      // 4. Create Docker container
-      // 5. Start the container
-      // 6. Set up webhook for auto-deployment
+      // Trigger actual deployment process (fire and forget)
+      DeploymentService.executeDeployment(
+        deploymentId,
+        projectId,
+        environmentId,
+        req.user.userId
+      ).catch((error) => {
+        logger.error('[Deployment Error]', error);
+      });
 
       sendSuccess(
         res,
