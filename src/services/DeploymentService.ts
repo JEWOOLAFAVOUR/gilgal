@@ -129,7 +129,7 @@ export class DeploymentService {
    * Execute the deployment pipeline asynchronously
    * Builds image, runs container, and updates status
    */
-  private static async executeDeployment(
+  public static async executeDeployment(
     deploymentId: string,
     projectId: string,
     environmentId: string,

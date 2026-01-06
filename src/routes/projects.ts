@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ProjectService } from '../services/ProjectService';
+import { DeploymentService } from '../services/DeploymentService';
 import { GitHubOAuthService } from '../services/GitHubOAuthService';
 import { sendSuccess, sendError } from '../utils/error';
 import { HTTP_STATUS, ERROR_CODES, PAGINATION } from '../constants';
@@ -200,14 +201,17 @@ router.post(
         status: 'deploying',
       });
 
+      // Create deployment record
+      const deploymentId = uuidv4();
+      
       // Trigger actual deployment process (fire and forget)
       DeploymentService.executeDeployment(
         deploymentId,
         projectId,
         environmentId,
         req.user.userId
-      ).catch((error) => {
-        logger.error('[Deployment Error]', error);
+      ).catch((error: any) => {
+        console.error('[Deployment Error]', error);
       });
 
       sendSuccess(
