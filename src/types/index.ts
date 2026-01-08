@@ -65,8 +65,9 @@ export interface Project {
   slug: string;
   description?: string;
   repositoryUrl?: string;
+  deployedUrl?: string;
   framework: string;
-  status: 'active' | 'inactive' | 'archived';
+  status: 'active' | 'inactive' | 'archived' | 'success' | 'deploying';
   createdAt: Date;
   updatedAt: Date;
 }

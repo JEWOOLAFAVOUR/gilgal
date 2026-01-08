@@ -154,6 +154,13 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_projects_auto_deploy ON projects(auto_deploy_enabled);
     `,
   },
+  {
+    id: '013_add_deployed_url_to_projects',
+    sql: `
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS deployed_url TEXT;
+      CREATE INDEX IF NOT EXISTS idx_projects_deployed_url ON projects(deployed_url);
+    `,
+  },
 ];
 
 /**

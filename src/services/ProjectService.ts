@@ -11,6 +11,16 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export class ProjectService {
   /**
+   * Generate deployed URL for a project based on status and slug
+   */
+  private static generateDeployedUrl(slug: string, status: string): string | undefined {
+    if (status === 'success' || status === 'deploying') {
+      return `https://${slug}.gilgal.tech`;
+    }
+    return undefined;
+  }
+
+  /**
    * Create a new project
    */
   static async createProject(userId: string, data: CreateProjectRequest): Promise<Project> {
@@ -101,12 +111,35 @@ export class ProjectService {
     limit: number = 20,
     offset: number = 0
   ): Promise<{ projects: Project[]; total: number }> {
-    const projectsResult = await query<Project>(
+    // Get projects with latest deployment status
+    const projectsResult = await query<any>(
       `
-      SELECT id, user_id, name, slug, description, repository_url, framework, status, created_at, updated_at
-      FROM projects
-      WHERE user_id = $1 AND deleted_at IS NULL
-      ORDER BY created_at DESC
+      SELECT 
+        p.id, 
+        p.user_id, 
+        p.name, 
+        p.slug, 
+        p.description, 
+        p.repository_url, 
+        p.framework, 
+        p.deployed_url,
+        COALESCE(d.status, 'inactive') as status,
+        p.created_at, 
+        p.updated_at,
+        d.id as latest_deployment_id,
+        d.deployed_at,
+        d.container_id,
+        d.container_port
+      FROM projects p
+      LEFT JOIN LATERAL (
+        SELECT id, project_id, status, deployed_at, container_id, container_port
+        FROM deployments
+        WHERE project_id = p.id
+        ORDER BY deployed_at DESC
+        LIMIT 1
+      ) d ON true
+      WHERE p.user_id = $1 AND p.deleted_at IS NULL
+      ORDER BY p.created_at DESC
       LIMIT $2 OFFSET $3
       `,
       [userId, limit, offset]
@@ -117,25 +150,53 @@ export class ProjectService {
       [userId]
     );
 
+    // Generate deployed URLs for active projects
+    const projectsWithUrls = projectsResult.rows.map((project) => ({
+      ...project,
+      deployedUrl: this.generateDeployedUrl(project.slug, project.status),
+    }));
+
     return {
-      projects: projectsResult.rows,
+      projects: projectsWithUrls,
       total: parseInt(String(countResult.rows[0]?.count || '0'), 10),
     };
   }
 
   /**
-   * Get project by ID with ownership verification
+   * Get project by ID with ownership verification and latest deployment status
    */
   static async getProject(projectId: string, userId?: string): Promise<Project> {
     let query_text = `
-      SELECT id, user_id, name, slug, description, repository_url, framework, status, created_at, updated_at
-      FROM projects
-      WHERE id = $1 AND deleted_at IS NULL
+      SELECT 
+        p.id, 
+        p.user_id, 
+        p.name, 
+        p.slug, 
+        p.description, 
+        p.repository_url, 
+        p.framework, 
+        p.deployed_url,
+        COALESCE(d.status, 'inactive') as status,
+        p.created_at, 
+        p.updated_at,
+        d.id as latest_deployment_id,
+        d.deployed_at,
+        d.container_id,
+        d.container_port
+      FROM projects p
+      LEFT JOIN LATERAL (
+        SELECT id, project_id, status, deployed_at, container_id, container_port
+        FROM deployments
+        WHERE project_id = p.id
+        ORDER BY deployed_at DESC
+        LIMIT 1
+      ) d ON true
+      WHERE p.id = $1 AND p.deleted_at IS NULL
     `;
     const params: any[] = [projectId];
 
     if (userId) {
-      query_text += ' AND user_id = $2';
+      query_text += ' AND p.user_id = $2';
       params.push(userId);
     }
 
@@ -145,7 +206,12 @@ export class ProjectService {
       throw new ApiError(HTTP_STATUS.NOT_FOUND, ERROR_CODES.PROJECT_NOT_FOUND, 'Project not found');
     }
 
-    return result.rows[0];
+    const project = result.rows[0];
+    // Generate deployed URL based on status and slug
+    return {
+      ...project,
+      deployedUrl: this.generateDeployedUrl(project.slug, project.status),
+    };
   }
 
   /**
